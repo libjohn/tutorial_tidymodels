@@ -1,0 +1,55 @@
+---
+title: "categorical variable prediction"
+output: html_notebook
+---
+
+[section 5.13.4](https://jhudatascience.org/tidyversecourse/model.html#example-of-categorical-variable-prediction) from tidymodels ecosystems - chapter 5 of _ts4ds_
+
+```{r}
+library(tidymodels)
+```
+
+
+
+We have already split our data into testing and training sets (see 01_LEARNING.Rmd), so we don’t necessarily need to do that again.
+
+However, we can stratify our split by a particular feature of the data using the strata argument of the initial_split() function.
+
+
+```{r}
+set.seed(1234)
+initial_split(iris, strata = Species, prop = 2/3)
+```
+
+```{r}
+training_iris <-training(split_iris)
+training_iris
+```
+
+```{r}
+count(training_iris, Species)
+```
+
+```{r}
+testing_iris <-testing(split_iris)
+testing_iris
+```
+
+
+```{r}
+count(testing_iris, Species)
+```
+
+this time we'll perform cross-validation
+
+Cross validation is also helpful for optimizing what we call hyperparameters.
+
+Hyperparameters are aspects about the model that we need to specify. 
+
+
+Often packages will choose a default value, however it is better to use the training data to see what value
+
+
+
+
+
