@@ -17,3 +17,7 @@ knitr::opts_chunk$set(
 <!-- badges: end -->
 
 Reading and practicing "[Modeling Data in the Tidyverse](https://jhudatascience.org/tidyversecourse/model.html)", Chapter 5 of [_Tidyverse Skills for Data Science_](https://jhudatascience.org/tidyversecourse)
+
+***
+
+`r emo::ji("bicycle")``
