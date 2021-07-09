@@ -324,5 +324,264 @@ PM_wflow_fit %>%
 
 #### model performance
 
+Machine learning (ML) is an optimization problem that tries to minimize the distance between our predicted outcome  $\hat Y = f(X)$ and actual outcome  $Y$ using our features (or predictor variables)  $X$ as input to a function  $f$ that we want to estimate.
 
+**As our goal in this section is to assess overall model performance, **
+
+
+
+```{r}
+wf_fit <- PM_wflow_fit %>% 
+  pull_workflow_fit()
+```
+
+First, let’s pull out our predicted outcome values $\hat Y = f(X)$
+
+
+```{r}
+
+wf_fitted_values <- wf_fit$fit$fitted.values
+head(wf_fitted_values)
+
+# or
+
+wf_fitted_values <- 
+  broom::augment(wf_fit$fit, data = preproc_train) %>% 
+  select(value, .fitted:.std.resid)
+
+wf_fitted_values  #see .fitted variable
+```
+
+
+Or use the `predict()` fucntion.   we use the actual workflow here, we can (and actually need to) use the raw data instead of the preprocessed data
+
+```{r}
+values_pred_train <- 
+  predict(PM_wflow_fit, train_pm) %>% 
+  bind_cols(train_pm %>% select(value, fips, county, id)) 
+
+values_pred_train  #see .pred column
+```
+
+Now, we can compare the predicted outcome values (or fitted values)  $\hat Y$ to the actual outcome values  $Y$ that we observed:
+
+```{r}
+library(ggplot2)
+wf_fitted_values %>% 
+  ggplot(aes(x =  value, y = .fitted)) + 
+  geom_point() + 
+  xlab("actual outcome values") + 
+  ylab("predicted outcome values")
+```
+
+Next, let’s use different distance functions  $d(\cdot)$ to assess how far off our predicted outcome  $\hat Y = f(X)$ and actual outcome  $Y$ values are from each other: 
+
+$$d(Y- \hat Y)$$
+There are entire scholarly fields of research dedicated to identifying different distance metrics  $d(\cdot)$ for machine learning applications. However, we will focus on root mean squared error `( rmse )`
+
+$$ RMSE = \sqrt{\frac{\sum_{i=0}^n(\hat y = y_t)^2}{n}}$$
+One way to calculate these metrics within the `tidymodels` framework is to use the `yardstick` package using the `metrics()` function.
+
+
+```{r}
+yardstick::metrics(wf_fitted_values, 
+                   truth = value, estimate = .fitted)
+```
+
+
+We also intend to perform cross validation, so we will now split the training data further using the vfold_cv() function of the rsample package.
+
+
+```{r}
+set.seed(1234)
+
+vfold_pm <- rsample::vfold_cv(data = train_pm, v = 10)
+vfold_pm
+```
+
+```{r}
+pull(vfold_pm, splits)
+```
+
+We can fit the model to our cross validation folds using the fit_resamples() function of the tune package, by specifying our workflow object and the cross validation fold object we just created. See [here](https://tidymodels.github.io/tune/reference/fit_resamples.html) for more information.
+
+```{r}
+set.seed(122)
+resample_fit <- tune::fit_resamples(PM_wflow, vfold_pm)
+```
+
+
+We can now take a look at various performance metrics based on the fit of our cross validation “resamples.”
+
+To do this we will use the collect_metrics() function of the tune package. This will show us the mean of the accuracy estimate of the different cross validation folds.
+
+
+```{r}
+resample_fit
+```
+
+```{r}
+collect_metrics(resample_fit)
+```
+
+
+### Random forest
+
+```{r}
+RF_rec <- recipe(train_pm) %>%
+    update_role(everything(), new_role = "predictor")%>%
+    update_role(value, new_role = "outcome")%>%
+    update_role(id, new_role = "id variable") %>%
+    update_role("fips", new_role = "county id") %>%
+    step_novel("state") %>%
+    step_string2factor("state", "county", "city") %>%
+    step_rm("county") %>%
+    step_rm("zcta") %>%
+    step_corr(all_numeric())%>%
+    step_nzv(all_numeric())
+```
+
+
+```{r}
+PMtree_model <- 
+  parsnip::rand_forest(mtry = 10, min_n = 4)
+PMtree_model
+```
+
+
+```{r}
+library(randomForest)
+```
+
+```{r}
+RF_PM_model <- 
+  PMtree_model %>%
+  set_engine("randomForest") %>%
+  set_mode("regression")
+
+RF_PM_model
+```
+
+```{r}
+RF_wflow <- workflows::workflow() %>%
+            workflows::add_recipe(RF_rec) %>%
+            workflows::add_model(RF_PM_model)
+RF_wflow
+```
+
+
+```{r}
+RF_wflow_fit <- parsnip::fit(RF_wflow, data = train_pm)
+RF_wflow_fit
+```
+
+```{r}
+RF_wflow_fit %>% 
+  pull_workflow_fit() %>% 
+  vip::vip(num_features = 10)
+```
+
+```{r}
+set.seed(456)
+resample_RF_fit <- tune::fit_resamples(RF_wflow, vfold_pm)
+collect_metrics(resample_RF_fit)
+```
+
+```{r}
+RF_PM_model <- 
+  parsnip::rand_forest(mtry = 10, min_n = 4) %>%
+  set_engine("randomForest") %>%
+  set_mode("regression")
+
+RF_PM_model
+```
+
+#### hyperparameters
+
+```{r}
+tune_RF_model <- rand_forest(mtry = tune(), min_n = tune()) %>%
+  set_engine("randomForest") %>%
+  set_mode("regression")
+    
+
+tune_RF_model
+```
+
+add to workflow
+
+```{r}
+RF_tune_wflow <- workflows::workflow() %>%
+            workflows::add_recipe(RF_rec) %>%
+            workflows::add_model(tune_RF_model)
+RF_tune_wflow
+```
+
+Tune in parallel
+
+```{r}
+library(parallel)
+detectCores()
+```
+
+twelve cores
+
+```{r}
+doParallel::registerDoParallel(cores=6)
+set.seed(123)
+tune_RF_results <- tune_grid(object = RF_tune_wflow, resamples = vfold_pm, grid = 20)
+```
+
+```{r}
+tune_RF_results
+```
+
+```{r}
+tune_RF_results%>%
+  collect_metrics() %>%
+  head()
+```
+
+```{r}
+show_best(tune_RF_results, metric = "rmse", n =1)
+```
+
+```{r}
+tuned_RF_values<- select_best(tune_RF_results, "rmse")
+tuned_RF_values
+```
+
+```{r}
+RF_tuned_wflow <-RF_tune_wflow %>%
+  tune::finalize_workflow(tuned_RF_values)
+```
+
+```{r}
+RF_tuned_wflow
+```
+
+
+```{r}
+overallfit <-tune::last_fit(RF_tuned_wflow, pm_split)
+ # or
+overallfit <-RF_wflow %>%
+  tune::last_fit(pm_split)
+
+collect_metrics(overallfit)
+```
+
+
+```{r}
+test_predictions <-collect_predictions(overallfit)
+test_predictions
+```
+
+
+```{r}
+test_predictions %>% 
+  ggplot(aes(x =  value, y = .pred)) + 
+  geom_point() + 
+  xlab("actual outcome values") + 
+  ylab("predicted outcome values") +
+  geom_smooth(method = "lm")
+```
 
