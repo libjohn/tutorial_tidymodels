@@ -1,0 +1,328 @@
+---
+title: "case studies"
+output: html_notebook
+---
+
+### Load library packages
+
+
+
+```{r}
+library(tidyverse)
+library(skimr)
+library(tidymodels)
+library(corrplot)
+```
+
+
+
+## 5.14 Case studies
+
+https://jhudatascience.org/tidyversecourse/model.html#case-studies-4
+
+### Predicting Annual Air Pollution (case study 1)
+
+
+#### the data
+
+There are 48 predictors with values for 876 monitors (observations).  The data comes from the US Environmental Protection Agency (EPA), the National Aeronautics and Space Administration (NASA), the US Census, and the National Center for Health Statistics (NCHS).
+
+https://jhudatascience.org/tidyversecourse/model.html#data-import
+
+```{r}
+pm <- read_csv("data/pm25_data.csv")
+glimpse(pm)
+```
+
+```{r}
+pm <-pm %>%
+  mutate(across(c(id, fips, zcta), as_factor)) 
+```
+
+
+```{r}
+skim(pm)
+```
+
+
+```{r fig.height=12, fig.width=12}
+PM_cor <- cor(pm %>% dplyr::select_if(is.numeric))
+corrplot::corrplot(PM_cor, tl.cex = 0.5)
+```
+
+
+### split the data
+
+tidymodels
+
+```{r}
+set.seed(1234)
+pm_split <- rsample::initial_split(data = pm, prop = 2/3)
+pm_split
+```
+
+Importantly the initial_split() function only determines what rows of our pm dataframe should be assigned for training or testing, it does not actually split the data.
+
+To extract the testing and training data we can use the training() and testing() functions also of the rsample package.
+
+
+```{r}
+train_pm <-rsample::training(pm_split)
+test_pm <-rsample::testing(pm_split)
+```
+
+### recipe
+
+https://recipes.tidymodels.org/reference/index.html
+
+```{r}
+# library(tidymodels)
+simple_rec <- train_pm %>%
+  recipes::recipe(value ~ .)
+
+simple_rec
+```
+
+#### update role 
+
+of `id` which is not a predictor
+
+```{r}
+simple_rec <- train_pm %>%
+  recipes::recipe(value ~ .) %>%
+  recipes::update_role(id, new_role = "id variable")
+
+simple_rec
+```
+
+#### steps
+
+
+https://recipes.tidymodels.org/reference/index.html
+
+All of the step functions look like step_*() with the * replaced with a name, except for the check functions which look like check_*().
+
+There are several ways to select what variables to apply steps to:
+
+1. Using tidyselect methods: contains(), matches(), starts_with(), ends_with(), everything(), num_range()
+1. Using the type: all_nominal(), all_numeric() , has_type()
+1. Using the role: all_predictors(), all_outcomes(), has_role()
+1. Using the name - use the actual name of the variable/variables of interest
+
+
+> We want to dummy encode our categorical variables so that they are numeric as we plan to use a linear regression for our model.
+
+We will use the one-hot encoding means that we do not simply encode our categorical variables numerically, as our numeric assignments can be interpreted by algorithms as having a particular rank or order. Instead, binary variables made of 1s and 0s are used to arbitrarily assign a numeric value that has no apparent order.
+
+
+```{r}
+simple_rec %>%
+  step_dummy(state, county, city, zcta, one_hot = TRUE)
+```
+
+
+```{r}
+simple_rec %>%
+  update_role("fips", new_role = "county id")
+```
+
+##### step_corr - remove redundant correlations
+
+We also want to remove variables that appear to be redundant and are highly correlated with others, as we know from our exploratory data analysis that many of our variables are correlated with one another. We can do this using the step_corr() function.
+
+
+```{r}
+simple_rec %>%
+  step_corr(all_predictors(), - CMAQ, - aod)
+```
+
+##### step_nzv -- remove variables with near-zero variance
+
+
+```{r}
+simple_rec %>%
+  step_nzv(all_predictors(), - CMAQ, - aod)
+```
+
+##### Putting it all together
+
+```{r}
+simple_rec <- train_pm %>%
+  recipes::recipe(value ~ .) %>%
+  recipes::update_role(id, new_role = "id variable") %>%
+  update_role("fips", new_role = "county id") %>%
+  step_dummy(state, county, city, zcta, one_hot = TRUE) %>%
+  step_corr(all_predictors(), - CMAQ, - aod)%>%
+  step_nzv(all_predictors(), - CMAQ, - aod)
+  
+simple_rec
+```
+#### Preprocessing
+
+```{r}
+prepped_rec <- prep(simple_rec, verbose = TRUE, retain = TRUE)
+```
+
+
+##### bake
+
+we retained our preprocessed training data (i.e. prep(retain=TRUE)), we can take a look at it by using the bake() function of the recipes package
+
+requires the new_data = NULL argument when we are using the training data.
+
+
+```{r}
+preproc_train <- bake(prepped_rec, new_data = NULL)
+glimpse(preproc_train)
+```
+
+
+###### extracting
+
+```{r}
+baked_test_pm <- recipes::bake(prepped_rec, new_data = test_pm)
+glimpse(baked_test_pm)
+```
+
+
+###### examine
+
+```{r}
+traincities <- train_pm %>% distinct(city)
+testcities <- test_pm %>% distinct(city)
+
+#get the number of cities that were different
+dim(dplyr::setdiff(traincities, testcities))
+
+#get the number of cities that overlapped
+dim(dplyr::intersect(traincities, testcities))
+```
+
+
+
+So, let’s go back to our pm dataset and modify the city variable to just be values of in a city or not in a city using the case_when() function of dplyr. This function allows you to vectorize multiple if_else() statements.
+
+```{r}
+pm %>% #count(city, sort = TRUE)
+  mutate(city = case_when(city == "Not in a city" ~ "Not in a city",
+                          city != "Not in a city" ~ "In a city")) %>% 
+  select(state, county, city)
+```
+
+##### redo
+
+```{r}
+pm <- pm %>% 
+  mutate(city = case_when(city == "Not in a city" ~ "Not in a city",
+                          city != "Not in a city" ~ "In a city"))
+
+set.seed(1234) # same seed as before
+pm_split <-rsample::initial_split(data = pm, prop = 2/3)
+pm_split
+```
+
+```{r}
+ train_pm <-rsample::training(pm_split)
+ test_pm <-rsample::testing(pm_split)
+```
+
+```{r}
+novel_rec <-train_pm %>%
+    recipe() %>%
+    update_role(everything(), new_role = "predictor") %>%
+    update_role(value, new_role = "outcome") %>%
+    update_role(id, new_role = "id variable") %>%
+    update_role("fips", new_role = "county id") %>%
+    step_dummy(state, county, city, zcta, one_hot = TRUE) %>%
+    step_corr(all_numeric()) %>%
+    step_nzv(all_numeric()) 
+```
+
+Now we will check the preprocessed data again to see if we still have NA values
+
+```{r}
+prepped_rec <- prep(novel_rec, verbose = TRUE, retain = TRUE)
+```
+
+```{r}
+preproc_train <- bake(prepped_rec, new_data = NULL)
+glimpse(preproc_train)
+```
+
+```{r}
+baked_test_pm <- recipes::bake(prepped_rec, new_data = test_pm)
+```
+
+```{r}
+glimpse(baked_test_pm)
+```
+
+Great, now we no longer have NA values!
+
+##### specify the model
+
+ For our case, we are going to start our analysis with a linear regression but we will demonstrate how we can try different models.
+
+```{r}
+PM_model <- parsnip::linear_reg() # PM was used in the name for particulate matter
+PM_model
+```
+
+OK. So far, all we have defined is that we want to use a linear regression…
+Let’s tell parsnip more about what we want.
+
+```{r}
+lm_PM_model <- 
+  PM_model  %>%
+  parsnip::set_engine("lm")
+
+lm_PM_model
+```
+
+Here, we aim to predict the air pollution. You can do this with the set_mode() function of the parsnip package, by using either set_mode("classification") or set_mode("regression").
+
+
+```{r}
+lm_PM_model <- 
+  PM_model  %>%
+  parsnip::set_engine("lm") %>%
+  set_mode("regression")
+
+lm_PM_model
+```
+
+```{r}
+PM_wflow <-workflows::workflow() %>%
+           workflows::add_recipe(novel_rec) %>%
+           workflows::add_model(lm_PM_model)
+PM_wflow
+```
+
+
+```{r}
+PM_wflow_fit <- parsnip::fit(PM_wflow, data = train_pm)
+PM_wflow_fit
+```
+
+##### assessing the model fit
+
+```{r}
+wflowoutput <- PM_wflow_fit %>% 
+  pull_workflow_fit() %>% 
+  broom::tidy() 
+
+wflowoutput
+```
+
+##### important
+
+```{r}
+PM_wflow_fit %>% 
+  pull_workflow_fit() %>% 
+  vip::vip(num_features = 10)
+```
+
+#### model performance
+
+
+

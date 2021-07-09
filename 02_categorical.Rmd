@@ -3,6 +3,8 @@ title: "categorical variable prediction"
 output: html_notebook
 ---
 
+## 5.13.4
+
 [section 5.13.4](https://jhudatascience.org/tidyversecourse/model.html#example-of-categorical-variable-prediction) from tidymodels ecosystems - chapter 5 of _ts4ds_
 
 ```{r}
@@ -18,7 +20,8 @@ However, we can stratify our split by a particular feature of the data using the
 
 ```{r}
 set.seed(1234)
-initial_split(iris, strata = Species, prop = 2/3)
+split_iris <- initial_split(iris, strata = Species, prop = 2/3)
+split_iris
 ```
 
 ```{r}
@@ -42,14 +45,190 @@ count(testing_iris, Species)
 
 this time we'll perform cross-validation
 
-Cross validation is also helpful for optimizing what we call hyperparameters.
+Cross validation (tuning) is also helpful for optimizing what we call hyperparameters.
 
 Hyperparameters are aspects about the model that we need to specify. 
 
 
 Often packages will choose a default value, however it is better to use the training data to see what value
 
+First split training data into cross validation samples.  There are many types of cross validation - most can be implemented with [rsample](https://rsample.tidymodels.org/)
+
+Here we'll use the popular _v-fold_ or _k-fold_ cross validation
+
+- divide the training set into v (or k) equal sized pieces.  the number is arbitrary but 10 folds is good convention (depending on variability and size of dataset).  But here we'll use four folds for simplicity
+
+
+### vfold_cv() 5.13.4.1
 
 
 
+
+
+```{r}
+set.seed(1234)
+vfold_iris <- rsample::vfold_cv(data = training_iris, v = 4)
+vfold_iris
+```
+
+```{r}
+pull(vfold_iris, splits)
+```
+
+First we will just use cross validation to get a better sense of the out-of-sample performance of our model using just the training data. Then we will show how to modify this to perform tuning.
+
+If we want to take a look at the cross validation splits we can do so like this:
+
+```{r}
+first_fold <- vfold_iris$splits[[1]]
+head(as.data.frame(first_fold, data = "analysis")) # training set of this fold
+
+as_tibble(first_fold, data = "analysis")
+as_tibble(first_fold, data = "assessment")
+```
+
+### another recipe 5.13.4.2
+
+categorical recipes
+
+```{r}
+cat_recipe <- training_iris %>%
+recipe(Species ~ .)
+```
+
+This time we will also not have any preprocessing steps for simplicity sake, 
+
+
+Next step:  specify model (see [parsnip modeling options](https://www.tidymodels.org/find/parsnip/))
+
+using classificaton and gregression tree (CART)
+
+```{r}
+library(rpart)   # used as the engine
+```
+
+
+```{r}
+cat_model <- parsnip::decision_tree() %>%
+             parsnip::set_mode("classification") %>%
+             parsnip::set_engine("rpart")
+cat_model
+```
+
+
+make a workflow
+
+```{r}
+iris_cat_wflow <-workflows::workflow() %>%
+           workflows::add_recipe(cat_recipe) %>%
+           workflows::add_model(cat_model)
+iris_cat_wflow
+```
+
+
+next step is to fit and tune the model with our training data cross validation subsets.
+
+### assess model performance 5.13.4.3
+
+
+```{r}
+iris_cat_wflow_fit <- parsnip::fit(iris_cat_wflow, data = training_iris)
+iris_cat_wflow_fit
+```
+
+```{r}
+wf_fit_cat <- iris_cat_wflow_fit %>% 
+  pull_workflow_fit()
+```
+
+This lists a score for each variable which shows the decrease in error when splitting by this variable relative to others.
+
+```{r}
+wf_fit_cat$fit$variable.importance
+```
+
+
+we can use the accuracy() function of the yardstick package instead of the rmse() function to assess the model. We first need to get the predicted values using the predict() function, as these are not in the fit output.
+
+
+```{r}
+pred_species<-predict(iris_cat_wflow_fit, new_data = training_iris)
+
+yardstick::accuracy(training_iris, 
+               truth = Species, estimate = pred_species$.pred_class)
+```
+
+
+```{r}
+count(iris, Species)
+count(training_iris, Species)
+count(pred_species, .pred_class)
+```
+
+
+compare
+
+```{r}
+predicted_and_truth <-bind_cols(training_iris, 
+        predicted_species = pull(pred_species, .pred_class))
+
+predicted_and_truth # %>% filter(Sepcies != predicted_species)
+```
+
+fit the model to cross validation folds using `tune::fit_resamples()` by specifiying workflow object and corss validation fold object 
+
+```{r}
+library(tune)
+set.seed(122)
+resample_fit <- tune::fit_resamples(iris_cat_wflow, vfold_iris)
+resample_fit
+```
+
+peformance metrics  `tune::collect_metrics()`
+
+```{r}
+collect_metrics(resample_fit)
+```
+
+
+### tuning 5.13.4.4
+
+tune a hyperparameter  `min_n` 
+
+```{r}
+set.seed(122)
+
+cat_model_tune <- parsnip::decision_tree(min_n = tune()) %>%
+                  parsnip::set_mode("classification") %>%
+                  parsnip::set_engine("rpart") 
+cat_model_tune
+
+```
+
+now create workflow using categorical recipe and tuning model
+
+```{r}
+iris_cat_wflow_tune <-workflows::workflow() %>%
+                      workflows::add_recipe(cat_recipe) %>%
+                      workflows::add_model(cat_model_tune)
+```
+
+We can use the tune_grid() function of the tune() package to use the workflow and fit the vfold_iris cross validation samples of our training data to test out a number of different values for the min_n argument for our model. The grid() argument specifies how many different values to try out.
+
+
+```{r}
+reasmple_fit <-tune::tune_grid(iris_cat_wflow_tune, resamples = vfold_iris, grid = 4)
+```
+
+
+```{r}
+tune::collect_metrics(resample_fit)
+```
+
+Or, we can use the show_best() function of the tune package to see the min_n values for the top performing models (those with the highest accuracy).
+
+
+```{r}
+tune::show_best(resample_fit, metric = "accuracy")
+```
 

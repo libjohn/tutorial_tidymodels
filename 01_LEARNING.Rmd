@@ -53,7 +53,7 @@ head(testing_iris)
 
 ## Step 2. recipes/steps
 
-aka **featre engineering**
+aka **feature engineering**
 
 5.12.3.2.1 - `recipes`
 5.12.3.2.2 - `steps*`
@@ -86,7 +86,7 @@ summary(first_recipe)
 ### `steps*`
 
 
- one-hot encode some of our categorical variables so that they can be used with certain algorithms like a linear regression require numeric predictors.  use the `step_dummy()` function and the `one_hot = TRUE` argument.
+One-hot encode some of our categorical variables so that they can be used with certain algorithms like a linear regression require numeric predictors.  use the `step_dummy()` function and the `one_hot = TRUE` argument.
  
  
 ```{r}
