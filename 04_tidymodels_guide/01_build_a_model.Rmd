@@ -5,6 +5,10 @@ output:
     toc: true
 ---
 
+## separate what you want to do from the execution
+
+"The extra step of defining the model using a function like `linear_reg()` might seem superfluous since a call to `lm()` is _much more succinct_. However, the problem with standard modeling functions is that they don’t **separate what you want to do from the execution**. For example, the process of executing a formula has to happen repeatedly across model calls even when the formula does not change; we can’t **recycle those computations**.
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 options(tibble.print_min = 5)
@@ -22,6 +26,7 @@ Take advantage of the RStudio IDE and use "Run All Chunks Above" or "Run Current
 Load necessary packages:
 
 ```{r}
+library(tidyverse)
 library(tidymodels)  # for the parsnip package, along with the rest of tidymodels
 
 # Helper packages
@@ -81,6 +86,9 @@ lm_mod <-
   set_engine("lm")
 ```
 
+> For this model, other packages may add additional engines. Use `show_engines()` to see the current set of engines. e.g. `show_engines("linear_reg")`
+
+
 Fit model:
 
 ```{r}
@@ -96,6 +104,18 @@ Present model results in a tidyverse friendly way with `tidy()` from `broom` pac
 tidy(lm_fit)
 ```
 
+This kind of output can be used to generate a dot-and-whisker plot of our regression results using the dotwhisker package:
+
+
+```{r}
+tidy(lm_fit) %>% 
+  dotwhisker::dwplot(dot_args = list(size = 2, color = "black"),
+         whisker_args = list(color = "black"),
+         vline = geom_vline(xintercept = 0, colour = "grey50", linetype = 2))
+```
+
+
+
 ## [Use a model to predict](https://www.tidymodels.org/start/models/#predict-model)
 
 New example data to predict:
@@ -105,6 +125,12 @@ new_points <- expand.grid(initial_volume = 20,
                           food_regime = c("Initial", "Low", "High"))
 new_points
 ```
+
+```{r}
+urchins %>% 
+  filter(initial_volume == 20)
+```
+
 
 Generate the mean body width values: 
 
@@ -187,3 +213,105 @@ Think about how we are using the pipe (`%>%`):
 
 + Use the pipe to pass around the _data_ in the **tidyverse**   
 + Use the pipe to pass around the _model object_ with **tidymodels**
+
+
+### Applying to previous knowledge
+
+From an example found at [_OpenIntro_](https://openintro-ims.netlify.app/)
+
+```{r}
+library(openintro)
+```
+
+
+
+```{r}
+loans <- loans_full_schema %>% 
+  select(interest_rate, debt_to_income, 
+         term, issue_month, verified_income,
+         total_credit_utilized, total_credit_limit,
+         public_record_bankrupt, 
+         credit_checks = inquiries_last_12m) %>% 
+  mutate(credit_util = total_credit_utilized / total_credit_limit) %>% 
+  mutate(bankruptcy = case_when(
+    public_record_bankrupt == 2 ~ 1,
+    public_record_bankrupt == 3 ~ 1,
+    TRUE ~ as.numeric(public_record_bankrupt)
+  )) %>% 
+  relocate(credit_util, .after = debt_to_income) %>% 
+  relocate(bankruptcy, .after = credit_util) %>% 
+  select(-total_credit_utilized, -total_credit_limit, -public_record_bankrupt) 
+
+# loans$bankruptcy
+# bankrupt_chrfct <- recode(loans$bankruptcy, "0" = "no", "1" = "yes")
+# bankrupt_chrfct
+# 
+# loans$bankrupt_chrfct <- bankrupt_chrfct
+
+loans
+```
+
+1. specify the model: `linear_reg()`
+2. identify the engine:  `set_engine("lm")`
+3. train or estimate the model (fit): `fit(interest_rate ~ bankruptcy, data = loans)`  
+
+    - `show_engines("linear_reg")`
+
+```{r}
+show_engines("linear_reg")
+# fit_credit = lm(interest_rate ~ bankruptcy, data = loans)
+
+lm_fit_credit <- linear_reg() %>% 
+  set_engine("lm") %>% 
+  fit(interest_rate ~ bankruptcy, data = loans)
+lm_fit_credit
+```
+
+```{r}
+tidy(lm_fit_credit)
+glance(lm_fit_credit)
+```
+
+
+```{r}
+lm_fit_multiple <- linear_reg() %>%
+  set_engine("lm") %>%
+  fit(
+    interest_rate ~ verified_income + 
+      debt_to_income + 
+      credit_util + bankruptcy + term + 
+      credit_checks + issue_month,
+    data = loans
+  )
+
+glance(lm_fit_multiple)
+tidy(lm_fit_multiple)
+```
+
+
+```{r}
+loans %>% 
+  ggplot(aes(credit_checks, interest_rate,
+         col = verified_income)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE) +
+  scale_color_viridis_d(option = "plasma", end = .7)
+```
+
+```{r}
+library(dotwhisker)
+tidy(lm_fit_multiple) %>% 
+  dwplot(dot_args = list(size = 2, color = "black"),
+         whisker_args = list(color = "black"),
+         vline = geom_vline(xintercept = 0, colour = "grey50", linetype = 2))
+```
+
+
+```{r}
+urchins
+
+loans
+
+expand.grid()
+```
+
