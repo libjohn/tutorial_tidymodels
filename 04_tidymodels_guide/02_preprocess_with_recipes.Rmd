@@ -5,6 +5,15 @@ output:
     toc: true
 ---
 
+Recipes are designed to help you preprocess your data before training your model. 
+
+- convert qualitative predictors to indicator variables (aka dummy vars)
+- transform data to be on a different scale (e.g. `log(var)`)
+- transform groups of predictors together
+- extract key features from raw vars (e.g. getting the daty of the week out of a data variable)
+
+similar to `formulat()` but brings a wider range of possibilities
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 options(tibble.print_min = 5)
@@ -53,18 +62,23 @@ flight_data <-
   mutate_if(is.character, as.factor)
 ```
 
-Before moving forward, let's reduce the size of our data so we can run these analyses with the default computational resources on RStudio Cloud. By doing so we will avoid aborting our session.
+NOTE:  above - important that our outcome variable (`arr_delay`) for _training_ a logistic regression model is a factor.
 
-Let's sample 20% of the rows and assign it as our data:
+<!-- Before moving forward, let's reduce the size of our data so we can run these analyses with the default computational resources on RStudio Cloud. By doing so we will avoid aborting our session. -->
+
+<!-- Let's sample 20% of the rows and assign it as our data: -->
+
+<!-- For example, the number of `late` and `on_time` flights you get here are less than the number of flights you see in the article. The proportions are very close, though, suggesting that our random sampling was indeed random and did not over- or under-sample one category vs. the other. -->
 
 ```{r}
 # Fix the random numbers by setting the seed 
 # This enables the analysis to be reproducible when random numbers are used
 set.seed(3)
 
-flight_data <- flight_data %>%
+flight_data_sample <- flight_data %>%
   slice_sample(prop = 0.2)
 
+nrow(flight_data_sample)
 nrow(flight_data)
 ```
 
@@ -78,7 +92,7 @@ flight_data %>%
   mutate(prop = n/sum(n))
 ```
 
-For example, the number of `late` and `on_time` flights you get here are less than the number of flights you see in the article. The proportions are very close, though, suggesting that our random sampling was indeed random and did not over- or under-sample one category vs. the other.
+>  a few specific variables will be important for preprocessing and modeling.
 
 Take a look at data types and data points:
 
@@ -86,7 +100,21 @@ Take a look at data types and data points:
 glimpse(flight_data)
 ```
 
-Summarise the dataset:
+### NOTE:
+
+1. `arr_delay` is a fctr
+
+2.  two variables that we don’t want to use as predictors in our model, but that we would like to retain as identification variables that can be used to troubleshoot poorly predicted data points: `flight`, and `time_hour` (a date-time)
+
+3. 104 values in `dest` ; 16 distinct `carriers`
+
+```{r}
+length(unique(flight_data$dest))
+length(unique(flight_data$carrier))
+```
+
+
+Summarize the dataset:
 
 ```{r}
 flight_data %>% 
@@ -97,6 +125,11 @@ flight_data %>%
 
 Create training and test sets:
 
+- training -- used to fit the model
+- test -- used to measure model performance
+
+below uses library(rsample)
+
 ```{r}
 # Put 3/4 of the data into the training set 
 data_split <- initial_split(flight_data, prop = 3/4)
@@ -104,6 +137,8 @@ data_split <- initial_split(flight_data, prop = 3/4)
 # Create data frames for the two sets:
 train_data <- training(data_split)
 test_data  <- testing(data_split)
+
+data_split
 ```
 
 Try typing `?initial_split` in the console to get more details about the splitting function from `rsample` package.
@@ -121,6 +156,9 @@ You can see more details about how to create **recipes** by typing `?recipe` in 
 
 
 Update variable roles of a recipe with `update_role`:
+(see: NOTE:#2, above)
+
+This step of adding roles to a recipe is optional; the purpose of using it here is that those two variables can be retained in the data but not included in the model. 
 
 ```{r}
 flights_rec <- 
@@ -139,6 +177,8 @@ summary(flights_rec)
 
 
 ## [Create features](https://www.tidymodels.org/start/recipes/#features)
+
+"A little bit of _feature engineering_ might go a long way to improving our model."
 
 What happens if we transform `date` column to `numeric`?
 
@@ -165,9 +205,17 @@ flights_rec <-
   step_rm(date)
 ```
 
+
 Check out help documents for these step functions with `?step_date`, `?step_holiday`, `?step_rm`.
 
+
+```{r}
+summary(flights_rec)
+```
+
 Create dummy variables using `step_dummy()`: 
+
+(see `step_dummy()` for more info about why dummy vars)
 
 ```{r}
 flights_rec <- 
@@ -200,7 +248,6 @@ flights_rec <-
   step_zv(all_predictors())
 ```
  
-
 ## [Fit a model with a recipe](https://www.tidymodels.org/start/recipes/#fit-workflow)
  
  Recall the [Build a model](https://www.tidymodels.org/start/models/) article.
@@ -243,6 +290,15 @@ flights_fit %>%
   tidy()
 ```
 
+See also:  pull_workflow_prepped_recipe()
+
+```{r}
+flights_fit %>% 
+  pull_workflow_prepped_recipe() %>% 
+  tidy()
+```
+
+
 ## [Use a trained workflow to predict](https://www.tidymodels.org/start/recipes/#predict-workflow)
 
 Simply apply fitted model to `test_data` and predict outcomes.
@@ -262,7 +318,17 @@ flights_pred <-
 flights_pred
 ```
 
-Note that the result you get here will be different than the online article since we only fitted the model to the subset of the actual data set.
+
+```{r}
+flights_pred %>% 
+  # filter(arr_delay == "on_time", .pred_on_time < .2)
+  # filter(arr_delay == "on_time", .pred_late > .7)
+  filter(arr_delay == "late", .pred_on_time > .9)
+
+```
+
+
+<!-- Note that the result you get here will be different than the online article since we only fitted the model to the subset of the actual data set. -->
 
 Let's look at model performance with ROC curve (`roc_curve()`) and plot by piping it to the `autoplot()`.
 
@@ -282,6 +348,8 @@ flights_pred %>%
 Good job!
 
 Now it's your turn to test out this workflow [*without*](https://tidymodels.github.io/workflows/reference/add_formula.html) this recipe! 
+
+
 
 In the [Build a model](https://www.tidymodels.org/start/models/) article, we did not use a recipe but used a **formula** instead.
 

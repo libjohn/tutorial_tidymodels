@@ -5,6 +5,8 @@ output:
     toc: true
 ---
 
+This tutorial explains how to characterize model performance based on resampling statistics.
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 options(tibble.print_min = 5)
@@ -181,6 +183,17 @@ rf_fit_rs
 
 Do you see the added columns `.metrics` and `.notes`?
 
+```{r}
+rf_fit_rs %>% 
+  slice(n =1) %>% 
+  unnest(".metrics")
+
+rf_fit_rs %>% 
+  slice(n =8) %>% 
+  unnest(".metrics")
+```
+
+
 Collect and summarize performance metrics from all 10 folds:
 
 ```{r}
@@ -188,3 +201,16 @@ collect_metrics(rf_fit_rs)
 ```
 
 Now these are more realistic results!
+
+compare to the test set to estimate final model performance
+
+```{r}
+rf_testing_pred %>%                   # test set predictions
+  roc_auc(truth = class, .pred_PS)
+
+rf_testing_pred %>%                   # test set predictions
+  accuracy(truth = class, .pred_class)
+```
+
+The performance metrics from the test set are much closer to the performance metrics computed using resampling than our first (“bad idea”) attempt. Resampling allows us to simulate how well our model will perform on new data, and the test set acts as the final, unbiased check for our model’s performance.
+

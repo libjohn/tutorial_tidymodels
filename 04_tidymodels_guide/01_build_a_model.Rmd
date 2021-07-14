@@ -7,6 +7,8 @@ output:
 
 ## separate what you want to do from the execution
 
+> specify and train models with different engines using the parsnip package. 
+
 "The extra step of defining the model using a function like `linear_reg()` might seem superfluous since a call to `lm()` is _much more succinct_. However, the problem with standard modeling functions is that they don’t **separate what you want to do from the execution**. For example, the process of executing a formula has to happen repeatedly across model calls even when the formula does not change; we can’t **recycle those computations**.
 
 ```{r setup, include=FALSE}
