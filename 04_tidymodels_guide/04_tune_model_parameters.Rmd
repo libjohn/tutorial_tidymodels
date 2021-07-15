@@ -5,6 +5,8 @@ output:
     toc: true
 ---
 
+hyperparameters are model parameters that cannot be learned directly from a data set during model training.  we can estimate the best values for these values by training many models on resampled data sets and exploring how well all these models perform. This process is called tuning.
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 options(tibble.print_min = 5)
@@ -39,7 +41,6 @@ data(cells, package = "modeldata")
 cells
 ```
 
-
 ## [Predicting image segmentation, but better](https://www.tidymodels.org/start/tuning/#why-tune)
 
 We'll try to predict well-segmented (`WS`) or poorly segmented (`PS`) cells again. (See previous article [Evaluate your model with resampling](https://www.tidymodels.org/start/resampling)).
@@ -52,6 +53,7 @@ Again we start by splitting the data:
 set.seed(123)
 cell_split <- initial_split(cells %>% select(-case), 
                             strata = class)
+cell_split
 cell_train <- training(cell_split)
 cell_test  <- testing(cell_split)
 ```
@@ -94,6 +96,7 @@ Let's create the folds we will use for tuning:
 ```{r}
 set.seed(234)
 cell_folds <- vfold_cv(cell_train)
+cell_folds
 ```
 
 
@@ -106,6 +109,7 @@ Create a `workflow()` with our model specification `tune_spec` and add a straigh
 tree_wf <- workflow() %>%
   add_model(tune_spec) %>%
   add_formula(class ~ .)
+tree_wf
 ```
 
 Finally, let's put the pieces together.

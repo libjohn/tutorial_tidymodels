@@ -7,6 +7,9 @@ output:
 
 This tutorial explains how to characterize model performance based on resampling statistics.
 
+- Train a random forest model to predict which images are segmented well vs. poorly, so that a biologist could filter out poorly segmented cell images in their analysis. 
+- Use resampling to estimate the performance of our model on this data.
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 options(tibble.print_min = 5)

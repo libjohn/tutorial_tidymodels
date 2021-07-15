@@ -6,11 +6,14 @@
 <!-- badges: start -->
 <!-- badges: end -->
 
-Reading and practicing “[Modeling Data in the
-Tidyverse](https://jhudatascience.org/tidyversecourse/model.html)”,
-Chapter 5 of [*Tidyverse Skills for Data
-Science*](https://jhudatascience.org/tidyversecourse)
+Reading and practicing
+
+-   [*Modeling Data in the
+    Tidyverse*](https://jhudatascience.org/tidyversecourse/model.html),
+    Chapter 5 of [*Tidyverse Skills for Data
+    Science*](https://jhudatascience.org/tidyversecourse)
+-   [Getting started with Tidymodels](https://www.tidymodels.org/start/)
 
 ------------------------------------------------------------------------
 
-🚲\`
+💹 🧪 📈

@@ -1,0 +1,131 @@
+---
+title: "tidy regression"
+output: html_notebook
+---
+
+https://www.tidymodels.org/learn/statistics/tidy-analysis/
+
+
+```{r}
+library(tidymodels)
+```
+
+
+```{r}
+data("Orange")
+
+datasets::Orange
+```
+
+```{r}
+ggplot(Orange, aes(age, circumference, color = Tree)) +
+  geom_line()
+```
+
+```{r}
+Orange %>% 
+  group_by(Tree) %>%
+  summarize(correlation = cor(age, circumference))
+```
+
+```{r}
+ct <- cor.test(Orange$age, Orange$circumference)
+ct
+```
+
+```{r}
+tidy(ct)
+```
+
+```{r}
+Orange %>% 
+  rownames_to_column() %>% 
+  select(-rowname)
+
+nested <- 
+  Orange %>% 
+  nest(data = c(age, circumference))
+
+nested 
+
+nested %>% 
+  unnest(data)
+```
+
+```{r}
+nested_lm <- nested %>% 
+  mutate(lm_reg = map(data, ~lm(circumference ~ age, data = .)))
+nested_lm
+
+nested %>% 
+  mutate(test = map(data, ~ cor.test(.x$age, .x$circumference)))
+```
+
+```{r}
+nested_lm %>% 
+  mutate(tidied = map(lm_reg, tidy)) %>% 
+  unnest(tidied) %>% 
+  select(-c("data", "lm_reg"))
+
+nested %>% 
+  mutate(
+    test = map(data, ~ cor.test(.x$age, .x$circumference)), # S3 list-col
+    tidied = map(test, tidy)
+  ) 
+```
+
+
+```{r}
+Orange %>% 
+  nest(data = c(age, circumference)) %>% 
+  mutate(
+    test = map(data, ~ cor.test(.x$age, .x$circumference)), # S3 list-col
+    tidied = map(test, tidy)
+  ) %>% 
+  unnest(cols = tidied) %>% 
+  select(-data, -test)
+```
+
+
+```{r}
+data(mtcars)
+mtcars <- as_tibble(mtcars)  # to play nicely with list-cols
+mtcars
+
+
+mtcars %>%
+  nest(data = c(-am)) %>% 
+  mutate(
+    fit = map(data, ~ lm(wt ~ mpg + qsec + gear, data = .x)),  # S3 list-col
+    tidied = map(fit, tidy)
+  ) %>% 
+  unnest(tidied) %>% 
+  select(-data, -fit)
+
+```
+
+
+```{r}
+regressions <- 
+  mtcars %>%
+  nest(data = c(-am)) %>% 
+  mutate(
+    fit = map(data, ~ lm(wt ~ mpg + qsec + gear, data = .x)),
+    tidied = map(fit, tidy),
+    glanced = map(fit, glance),
+    augmented = map(fit, augment)
+  )
+
+regressions %>% 
+  select(am, tidied) %>% 
+  unnest(tidied)
+
+regressions %>% 
+  select(am, glanced) %>% 
+  unnest(glanced)
+
+regressions %>% 
+  select(am, augmented) %>% 
+  unnest(augmented)
+```
+
