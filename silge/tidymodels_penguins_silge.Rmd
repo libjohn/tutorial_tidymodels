@@ -158,6 +158,10 @@ glm_rs %>%
   group_by(id) %>%
   roc_curve(sex, .pred_female)  %>% 
   autoplot()
+
+
+glm_rs # %>% 
+  # unnest(.predictions)
 ```
 
 
@@ -174,6 +178,11 @@ penguin_final <- penguin_wf %>%
 
 penguin_final
 ```
+
+```{r}
+glimpse(penguins_df)
+```
+
 
 The metrics and predictions here are on the testing data.
 
